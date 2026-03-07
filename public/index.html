@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Product Price Search</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>Product Price Search</h1>
+
+      <div class="search-box">
+        <input
+          type="text"
+          id="productInput"
+          placeholder="Search product e.g iPhone 14"
+        />
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <div id="loading" class="loading" style="display: none">
+        Searching products...
+      </div>
+      <div id="error" class="error"></div>
+      <div id="results"></div>
+    </div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
