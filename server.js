@@ -21,7 +21,7 @@ const PAKISTAN_CITIES = [
 ];
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(path.join(__dirname, "public")));
 
 function oxylabsRequest(body) {
   return new Promise((resolve, reject) => {
@@ -315,7 +315,7 @@ app.get("/api/search", async (req, res) => {
 });
 
 app.get("/{*path}", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
