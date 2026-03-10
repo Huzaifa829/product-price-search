@@ -1,0 +1,51 @@
+<!doctype html>
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+
+    <title>PakSearch - Product Price Finder</title>
+
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+
+  <body>
+    <header class="topbar">
+      <div class="logo">Pak Search</div>
+    </header>
+
+    <main class="container">
+      <div class="search-box">
+        <input
+          id="searchInput"
+          placeholder="Search products (iPhone 15, Dell Laptop...)"
+        />
+
+        <select id="citySelect"></select>
+
+        <select id="limitSelect">
+          <option value="4">4</option>
+          <option value="8" selected>8</option>
+          <option value="12">12</option>
+        </select>
+
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <div class="status">
+        <span id="resultCount"></span>
+
+        <span id="cityBadge"></span>
+      </div>
+
+      <div id="loading" class="loading">Loading products...</div>
+
+      <div id="productsGrid" class="products"></div>
+
+      <div id="pagination" class="pagination"></div>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>

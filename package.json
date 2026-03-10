@@ -12,11 +12,20 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "apify-client": "^2.22.2",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.0",
     "helmet": "^8.1.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Huzaifa829/product-price-search.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Huzaifa829/product-price-search/issues"
+  },
+  "homepage": "https://github.com/Huzaifa829/product-price-search#readme"
 }
