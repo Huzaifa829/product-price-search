@@ -93,72 +93,119 @@ async function fetchDuckImage(productName) {
     const term = productName
       .replace(/[^\w\s]/g, " ")
       .replace(/\s+/g, " ")
-      .trim(); // exact term
+      .trim();
 
-    if (!term) return null;
+    if (!term || term.length < 2) return null;
 
-    // Cache har product ke liye alag
-    if (imgCache.has("ddg_" + term)) return imgCache.get("ddg_" + term);
+    const cacheKey = "ddg_" + term;
+    if (imgCache.has(cacheKey)) return imgCache.get(cacheKey);
 
-    const q = encodeURIComponent(`"${term}"`); // exact phrase search
+    const q = encodeURIComponent(term);
 
-    // Step 1: get token (vqd)
+    // Step 1: vqd token
     const tokenPage = await new Promise((resolve, reject) => {
-      https
-        .get(
-          {
-            hostname: "duckduckgo.com",
-            path: `/?q=${q}&iax=images&ia=images`,
-            headers: { "User-Agent": "Mozilla/5.0" }, // important
+      const req = https.request(
+        {
+          hostname: "duckduckgo.com",
+          path: `/?q=${q}&iax=images&ia=images`,
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            Accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            Connection: "keep-alive",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Cache-Control": "max-age=0",
           },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => (data += c));
-            res.on("end", () => resolve(data));
-          },
-        )
-        .on("error", reject);
+        },
+        (res) => {
+          if (res.statusCode === 301 || res.statusCode === 302) {
+            resolve("");
+            return;
+          }
+          const chunks = [];
+          res.on("data", (c) => chunks.push(c));
+          res.on("end", () => resolve(Buffer.concat(chunks).toString()));
+        },
+      );
+      req.on("error", reject);
+      req.setTimeout(15000, () => {
+        req.destroy();
+        resolve("");
+      });
+      req.end();
     });
+
+    if (!tokenPage) return null;
 
     const match =
-      tokenPage.match(/vqd='(.*?)'/) || tokenPage.match(/vqd="(.*?)"/);
-    if (!match) return null;
+      tokenPage.match(/vqd='([\d-]+)'/) ||
+      tokenPage.match(/vqd="([\d-]+)"/) ||
+      tokenPage.match(/vqd=([\d-]+)[&"']/);
+
+    if (!match) {
+      console.warn(`[DDG] ❌ vqd nahi mila: "${term}"`);
+      imgCache.set(cacheKey, null);
+      return null;
+    }
+
     const token = match[1];
 
-    // Step 2: fetch images JSON
+    // Bot detection se bachne ke liye delay
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Step 2: Images fetch
     const json = await new Promise((resolve, reject) => {
-      https
-        .get(
-          {
-            hostname: "duckduckgo.com",
-            path: `/i.js?q=${q}&vqd=${token}`,
-            headers: {
-              "User-Agent": "Mozilla/5.0",
-              Accept: "application/json",
-            },
+      const req = https.request(
+        {
+          hostname: "duckduckgo.com",
+          path: `/i.js?q=${q}&vqd=${token}&p=1`,
+          method: "GET",
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            Accept: "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "en-US,en;q=0.9",
+            Referer: `https://duckduckgo.com/?q=${q}&iax=images&ia=images`,
+            "X-Requested-With": "XMLHttpRequest",
+            Connection: "keep-alive",
           },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => (data += c));
-            res.on("end", () => resolve(data));
-          },
-        )
-        .on("error", reject);
+        },
+        (res) => {
+          const chunks = [];
+          res.on("data", (c) => chunks.push(c));
+          res.on("end", () => resolve(Buffer.concat(chunks).toString()));
+        },
+      );
+      req.on("error", reject);
+      req.setTimeout(15000, () => {
+        req.destroy();
+        resolve("");
+      });
+      req.end();
     });
 
-    const parsed = JSON.parse(json);
+    if (!json) return null;
 
-    // First image only
+    let parsed;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      imgCache.set(cacheKey, null);
+      return null;
+    }
+
     const img = parsed?.results?.[0]?.image || null;
-
-    // Cache
-    imgCache.set("ddg_" + term, img);
-
-    console.log(`[DDG] ${img ? "✅" : "❌"} "${term}"`);
+    imgCache.set(cacheKey, img);
+    console.log(`[DDG] ${img ? "✅" : "❌"} "${term}" → ${img || "not found"}`);
     return img;
   } catch (err) {
     console.warn("[DDG] failed:", err.message);
-    return null; // fallback nahi
+    return null;
   }
 }
 // ────────────────────────────────────────────────────────────────
@@ -435,10 +482,6 @@ app.get("/api/search", async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page || "1"));
   const limit = Math.min(20, Math.max(1, parseInt(req.query.limit || "8")));
 
-  console.log(
-    `\n[API] /search q="${query}" city="${city}" page=${page} limit=${limit}`,
-  );
-
   if (!query || query.length < 2)
     return res
       .status(400)
@@ -447,34 +490,26 @@ app.get("/api/search", async (req, res) => {
   try {
     const all = await searchProducts(query, city);
 
-    // ── Google Image Search ───────────────────────────────────────
-    if (GOOGLE_API_KEY && GOOGLE_CX) {
-      const noImg = all.filter((p) => !p.image);
-      console.log(
-        `\n[IMG] Fetching DuckDuckGo images for ${noImg.length} products...`,
-      );
+    // Sirf woh products jinke image nahi
+    const noImg = all.filter((p) => !p.image);
+    console.log(
+      `\n[DDG] ${noImg.length} products ki images fetch ho rahi hain...`,
+    );
 
-      await Promise.all(
-        noImg.map(async (p) => {
-          const img = await fetchDuckImage(p.name); // product-specific
-          p.image = img || null; // fallback nahi
-        }),
-      );
-    } else {
-      console.warn("[IMG] ⚠️  GOOGLE_API_KEY or GOOGLE_CX missing in .env");
-      all.forEach((p) => {
-        if (!p.image && p.link && p.link !== "#") p.image = faviconOf(p.link);
-      });
-    }
-    // ─────────────────────────────────────────────────────────────
+    // Har product ke liye ALAG specific search
+    await Promise.all(
+      noImg.map(async (p) => {
+        // Product name + query mila ke specific search — e.g. "Samsung Galaxy S24 smartphone"
+        const searchTerm = `${p.name} ${query}`.slice(0, 100);
+        const img = await fetchDuckImage(searchTerm);
+        p.image = img || null; // null rakho — favicon NAHI
+      }),
+    );
 
     const start = (page - 1) * limit;
     const paginated = all.slice(start, start + limit);
     const totalPages = Math.ceil(all.length / limit);
 
-    console.log(
-      `[API] Returning ${paginated.length}/${all.length} (page ${page}/${totalPages})`,
-    );
     res.json({
       products: paginated,
       total: all.length,
