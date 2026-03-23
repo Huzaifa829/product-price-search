@@ -97,18 +97,19 @@ async function fetchDuckImage(productName) {
 
     if (!term) return null;
 
+    // Cache har product ke liye alag
     if (imgCache.has("ddg_" + term)) return imgCache.get("ddg_" + term);
 
-    // Exact phrase search using quotes
-    const q = encodeURIComponent(`"${term}"`);
+    const q = encodeURIComponent(`"${term}"`); // exact phrase search
 
+    // Step 1: get token (vqd)
     const tokenPage = await new Promise((resolve, reject) => {
       https
         .get(
           {
             hostname: "duckduckgo.com",
             path: `/?q=${q}&iax=images&ia=images`,
-            headers: { "User-Agent": "Mozilla/5.0" },
+            headers: { "User-Agent": "Mozilla/5.0" }, // important
           },
           (res) => {
             let data = "";
@@ -119,10 +120,12 @@ async function fetchDuckImage(productName) {
         .on("error", reject);
     });
 
-    const match = tokenPage.match(/vqd="(.*?)"/);
+    const match =
+      tokenPage.match(/vqd='(.*?)'/) || tokenPage.match(/vqd="(.*?)"/);
     if (!match) return null;
     const token = match[1];
 
+    // Step 2: fetch images JSON
     const json = await new Promise((resolve, reject) => {
       https
         .get(
@@ -144,15 +147,18 @@ async function fetchDuckImage(productName) {
     });
 
     const parsed = JSON.parse(json);
+
+    // First image only
     const img = parsed?.results?.[0]?.image || null;
 
+    // Cache
     imgCache.set("ddg_" + term, img);
 
     console.log(`[DDG] ${img ? "✅" : "❌"} "${term}"`);
     return img;
   } catch (err) {
     console.warn("[DDG] failed:", err.message);
-    return null;
+    return null; // fallback nahi
   }
 }
 // ────────────────────────────────────────────────────────────────
@@ -444,12 +450,14 @@ app.get("/api/search", async (req, res) => {
     // ── Google Image Search ───────────────────────────────────────
     if (GOOGLE_API_KEY && GOOGLE_CX) {
       const noImg = all.filter((p) => !p.image);
-      console.log(`\n[IMG] Fetching images for ${noImg.length} products...`);
+      console.log(
+        `\n[IMG] Fetching DuckDuckGo images for ${noImg.length} products...`,
+      );
 
       await Promise.all(
         noImg.map(async (p) => {
           const img = await fetchDuckImage(p.name); // product-specific
-          p.image = img || null; // fallback nahi, null agar nahi mila
+          p.image = img || null; // fallback nahi
         }),
       );
     } else {
