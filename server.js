@@ -7,6 +7,156 @@ const app = express();
 const username = "huzaifa_fFa1D";
 const password = "+Fazian12345";
 
+// ── Google Custom Search ─────────────────────────────────────────
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+const GOOGLE_CX = process.env.GOOGLE_CX;
+
+const imgCache = new Map();
+
+async function fetchGoogleImage(productName) {
+  if (!GOOGLE_API_KEY || !GOOGLE_CX) return null;
+
+  const term = productName
+    .replace(/[^\w\s]/g, " ") // special characters remove
+    .replace(/\s+/g, " ") // multiple spaces replace
+    .trim();
+
+  if (!term || term.length < 2) return null;
+  if (imgCache.has(term)) return imgCache.get(term);
+
+  const queryString = [
+    `key=${GOOGLE_API_KEY}`,
+    `cx=${GOOGLE_CX}`,
+    `searchType=image`,
+    `num=1`,
+    `imgSize=LARGE`,
+    `safe=active`,
+    `q=${encodeURIComponent(term)}`,
+  ].join("&");
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: "www.googleapis.com",
+        port: 443,
+        path: `/customsearch/v1?${queryString}`,
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Node.js/PakSearch",
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let raw = "";
+        res.on("data", (c) => (raw += c));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.error) {
+              console.error(
+                `[IMG] API Error ${parsed.error.code}: ${parsed.error.message}`,
+              );
+              resolve(null);
+              return;
+            }
+            resolve(parsed);
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+
+      req.on("error", (e) => {
+        console.error("[IMG] Request error:", e.message);
+        resolve(null);
+      });
+      req.setTimeout(10000, () => {
+        req.destroy();
+        resolve(null);
+      });
+      req.end();
+    });
+
+    const img = result?.items?.[0]?.link || null;
+    imgCache.set(term, img);
+    console.log(`[IMG] ${img ? "✅" : "❌"} "${term}" → ${img || "not found"}`);
+    return img;
+  } catch (err) {
+    console.warn(`[IMG] failed: ${err.message}`);
+    imgCache.set(term, null);
+    return null;
+  }
+}
+async function fetchDuckImage(productName) {
+  try {
+    const term = productName
+      .replace(/[^\w\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(); // exact term
+
+    if (!term) return null;
+
+    if (imgCache.has("ddg_" + term)) return imgCache.get("ddg_" + term);
+
+    // Exact phrase search using quotes
+    const q = encodeURIComponent(`"${term}"`);
+
+    const tokenPage = await new Promise((resolve, reject) => {
+      https
+        .get(
+          {
+            hostname: "duckduckgo.com",
+            path: `/?q=${q}&iax=images&ia=images`,
+            headers: { "User-Agent": "Mozilla/5.0" },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => (data += c));
+            res.on("end", () => resolve(data));
+          },
+        )
+        .on("error", reject);
+    });
+
+    const match = tokenPage.match(/vqd="(.*?)"/);
+    if (!match) return null;
+    const token = match[1];
+
+    const json = await new Promise((resolve, reject) => {
+      https
+        .get(
+          {
+            hostname: "duckduckgo.com",
+            path: `/i.js?q=${q}&vqd=${token}`,
+            headers: {
+              "User-Agent": "Mozilla/5.0",
+              Accept: "application/json",
+            },
+          },
+          (res) => {
+            let data = "";
+            res.on("data", (c) => (data += c));
+            res.on("end", () => resolve(data));
+          },
+        )
+        .on("error", reject);
+    });
+
+    const parsed = JSON.parse(json);
+    const img = parsed?.results?.[0]?.image || null;
+
+    imgCache.set("ddg_" + term, img);
+
+    console.log(`[DDG] ${img ? "✅" : "❌"} "${term}"`);
+    return img;
+  } catch (err) {
+    console.warn("[DDG] failed:", err.message);
+    return null;
+  }
+}
+// ────────────────────────────────────────────────────────────────
+
 const PAKISTAN_CITIES = [
   { name: "Karachi", geo: "Karachi,Sindh,Pakistan" },
   { name: "Lahore", geo: "Lahore,Punjab,Pakistan" },
@@ -207,8 +357,6 @@ function extractProducts(oxyResponse, source) {
 
     return best.map((item, i) => {
       const link = item.url || item.product_url || item.link || "#";
-      const img = item.thumbnail || item.image || faviconOf(link);
-
       return {
         id: i + 1,
         name: item.title || item.name || "Unknown Product",
@@ -222,7 +370,7 @@ function extractProducts(oxyResponse, source) {
             ? new URL(link).hostname.replace("www.", "")
             : "Google"),
         link,
-        image: img,
+        image: item.thumbnail || item.image || null,
         rating: item.rating || null,
         reviews: item.reviews_count || item.reviews || null,
       };
@@ -292,6 +440,26 @@ app.get("/api/search", async (req, res) => {
 
   try {
     const all = await searchProducts(query, city);
+
+    // ── Google Image Search ───────────────────────────────────────
+    if (GOOGLE_API_KEY && GOOGLE_CX) {
+      const noImg = all.filter((p) => !p.image);
+      console.log(`\n[IMG] Fetching images for ${noImg.length} products...`);
+
+      await Promise.all(
+        noImg.map(async (p) => {
+          const img = await fetchDuckImage(p.name); // product-specific
+          p.image = img || null; // fallback nahi, null agar nahi mila
+        }),
+      );
+    } else {
+      console.warn("[IMG] ⚠️  GOOGLE_API_KEY or GOOGLE_CX missing in .env");
+      all.forEach((p) => {
+        if (!p.image && p.link && p.link !== "#") p.image = faviconOf(p.link);
+      });
+    }
+    // ─────────────────────────────────────────────────────────────
+
     const start = (page - 1) * limit;
     const paginated = all.slice(start, start + limit);
     const totalPages = Math.ceil(all.length / limit);
