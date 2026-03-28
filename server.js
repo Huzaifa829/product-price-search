@@ -7,7 +7,6 @@ const app = express();
 const username = "huzaifa_fFa1D";
 const password = "+Fazian12345";
 
-// ── Google Custom Search ─────────────────────────────────────────
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const GOOGLE_CX = process.env.GOOGLE_CX;
 
@@ -17,8 +16,8 @@ async function fetchGoogleImage(productName) {
   if (!GOOGLE_API_KEY || !GOOGLE_CX) return null;
 
   const term = productName
-    .replace(/[^\w\s]/g, " ") // special characters remove
-    .replace(/\s+/g, " ") // multiple spaces replace
+    .replace(/[^\w\s]/g, " ") 
+    .replace(/\s+/g, " ") 
     .trim();
 
   if (!term || term.length < 2) return null;
@@ -80,7 +79,7 @@ async function fetchGoogleImage(productName) {
 
     const img = result?.items?.[0]?.link || null;
     imgCache.set(term, img);
-    console.log(`[IMG] ${img ? "✅" : "❌"} "${term}" → ${img || "not found"}`);
+    console.log(`[IMG] ${img ? "done" : "noi imhg"} "${term}" → ${img || "not found"}`);
     return img;
   } catch (err) {
     console.warn(`[IMG] failed: ${err.message}`);
@@ -102,7 +101,6 @@ async function fetchDuckImage(productName) {
 
     const q = encodeURIComponent(term);
 
-    // Step 1: vqd token
     const tokenPage = await new Promise((resolve, reject) => {
       const req = https.request(
         {
@@ -148,17 +146,15 @@ async function fetchDuckImage(productName) {
       tokenPage.match(/vqd=([\d-]+)[&"']/);
 
     if (!match) {
-      console.warn(`[DDG] ❌ vqd nahi mila: "${term}"`);
+      console.warn(`[DDG] vqd nahi mila: "${term}"`);
       imgCache.set(cacheKey, null);
       return null;
     }
 
     const token = match[1];
 
-    // Bot detection se bachne ke liye delay
     await new Promise((r) => setTimeout(r, 400));
 
-    // Step 2: Images fetch
     const json = await new Promise((resolve, reject) => {
       const req = https.request(
         {
@@ -201,14 +197,13 @@ async function fetchDuckImage(productName) {
 
     const img = parsed?.results?.[0]?.image || null;
     imgCache.set(cacheKey, img);
-    console.log(`[DDG] ${img ? "✅" : "❌"} "${term}" → ${img || "not found"}`);
+    console.log(`[DDG] ${img ? "done" : "no image"} "${term}" → ${img || "not found"}`);
     return img;
   } catch (err) {
     console.warn("[DDG] failed:", err.message);
     return null;
   }
 }
-// ────────────────────────────────────────────────────────────────
 
 const PAKISTAN_CITIES = [
   { name: "Karachi", geo: "Karachi,Sindh,Pakistan" },
@@ -251,7 +246,7 @@ function oxylabsRequest(body) {
 
     const req = https.request(options, (res) => {
       let data = "";
-      console.log("📥 HTTP Status:", res.statusCode);
+      console.log("HTTP Status:", res.statusCode);
       res.on("data", (c) => (data += c));
       res.on("end", () => {
         try {
@@ -259,11 +254,11 @@ function oxylabsRequest(body) {
 
           const content = parsed?.results?.[0]?.content;
           if (content) {
-            console.log("\n📦 content keys:", Object.keys(content));
+            console.log("content keys:", Object.keys(content));
 
             if (content.results) {
               console.log(
-                "📦 content.results keys:",
+                "content.results keys:",
                 Object.keys(content.results),
               );
               Object.entries(content.results).forEach(([k, v]) => {
@@ -288,7 +283,7 @@ function oxylabsRequest(body) {
               "shopping_results",
             ].forEach((k) => {
               if (Array.isArray(content[k])) {
-                console.log(`📦 content.${k}[] = ${content[k].length} items`);
+                console.log(`content.${k}[] = ${content[k].length} items`);
                 if (content[k].length > 0) {
                   console.log(`   [0] keys:`, Object.keys(content[k][0]));
                   console.log(
@@ -299,20 +294,20 @@ function oxylabsRequest(body) {
               }
             });
           } else {
-            console.log("⚠️  No content in response");
+            console.log(" No content in response");
             console.log("Full response:", JSON.stringify(parsed, null, 2));
           }
 
           resolve(parsed);
         } catch (e) {
-          console.error("❌ Parse Error:", e.message);
+          console.error("Parse Error:", e.message);
           reject(new Error("Parse error"));
         }
       });
     });
 
     req.on("error", (err) => {
-      console.error("❌ Request Error:", err.message);
+      console.error("Request Error:", err.message);
       reject(err);
     });
     req.setTimeout(30000, () => {
@@ -368,11 +363,11 @@ function faviconOf(url) {
 }
 
 function extractProducts(oxyResponse, source) {
-  console.log(`\n🔍 Extracting — source: ${source}`);
+  console.log(`Extracting — source: ${source}`);
   try {
     const content = oxyResponse?.results?.[0]?.content;
     if (!content) {
-      console.log("⚠️ No content");
+      console.log(" No content");
       return [];
     }
 
@@ -387,7 +382,7 @@ function extractProducts(oxyResponse, source) {
       content?.shopping_results,
     ].filter((a) => Array.isArray(a) && a.length > 0);
 
-    console.log(`📦 Candidate arrays found: ${candidates.length}`);
+    console.log(`Candidate arrays found: ${candidates.length}`);
     candidates.forEach((arr, i) =>
       console.log(
         `   [${i}] length=${arr.length}, keys=${JSON.stringify(Object.keys(arr[0]))}`,
@@ -404,9 +399,9 @@ function extractProducts(oxyResponse, source) {
 
     if (!best.length && candidates.length) best = candidates[0];
 
-    console.log(`✅ Best array: ${best.length} items`);
+    console.log(`Best array: ${best.length} items`);
     if (best[0])
-      console.log("🏷️ Sample item:", JSON.stringify(best[0], null, 2));
+      console.log("Sample item:", JSON.stringify(best[0], null, 2));
 
     return best.map((item, i) => {
       const link = item.url || item.product_url || item.link || "#";
@@ -429,13 +424,13 @@ function extractProducts(oxyResponse, source) {
       };
     });
   } catch (e) {
-    console.error("❌ Extract error:", e.message);
+    console.error("Extract error:", e.message);
     return [];
   }
 }
 
 async function searchProducts(query, geoLocation) {
-  console.log(`\n🔎 searchProducts: "${query}" | "${geoLocation}"`);
+  console.log(`searchProducts: "${query}" | "${geoLocation}"`);
 
   const attempts = [
     {
@@ -454,23 +449,23 @@ async function searchProducts(query, geoLocation) {
 
   for (const body of attempts) {
     try {
-      console.log(`\n▶️  Trying: ${body.source}`);
+      console.log(`\n Trying: ${body.source}`);
       const data = await oxylabsRequest(body);
       const products = extractProducts(data, body.source);
 
       if (products.length) {
         console.log(
-          `\n🎉 SUCCESS: ${products.length} products from ${body.source}`,
+          `\n SUCCESS: ${products.length} products from ${body.source}`,
         );
         return products;
       }
-      console.log(`⚠️ 0 from ${body.source}, trying next...`);
+      console.log(` 0 from ${body.source}, trying next...`);
     } catch (err) {
-      console.error(`❌ ${body.source} failed:`, err.message);
+      console.error(`${body.source} failed:`, err.message);
     }
   }
 
-  console.log("❌ All sources exhausted.");
+  console.log("All sources exhausted.");
   return [];
 }
 
@@ -490,19 +485,19 @@ app.get("/api/search", async (req, res) => {
   try {
     const all = await searchProducts(query, city);
 
-    // Sirf woh products jinke image nahi
+    
     const noImg = all.filter((p) => !p.image);
     console.log(
-      `\n[DDG] ${noImg.length} products ki images fetch ho rahi hain...`,
+      `[DDG] ${noImg.length} products ki images fetch ho rahi hain`,
     );
 
-    // Har product ke liye ALAG specific search
+ 
     await Promise.all(
       noImg.map(async (p) => {
-        // Product name + query mila ke specific search — e.g. "Samsung Galaxy S24 smartphone"
+   
         const searchTerm = `${p.name} ${query}`.slice(0, 100);
         const img = await fetchDuckImage(searchTerm);
-        p.image = img || null; // null rakho — favicon NAHI
+        p.image = img || null; 
       }),
     );
 
@@ -531,7 +526,7 @@ app.get("/{*path}", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 PakSearch → http://localhost:${PORT}`);
-  console.log(`📦 Pakistan Product Price Search`);
-  console.log(`📁 Dir: ${__dirname}\n`);
+  console.log(`\n PakSearch → http://localhost:${PORT}`);
+  console.log(`Pakistan Product TM Price Search`);
+  console.log(`Dir: ${__dirname}\n`);
 });
